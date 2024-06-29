@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Console - Rikka</title>
+    <link href="https://cdn.staticfile.net/mdui/1.0.2/css/mdui.min.css" rel="stylesheet">
+    <script src="https://cdn.staticfile.net/vue/3.3.4/vue.global.min.js"></script>
+</head>
+<style>
+    .mdui-switch-icon:before {
+        box-shadow: none !important;
+    }
+
+    body {
+        background-color: #f1f2f3;
+    }
+
+    /* 样式用于全屏加载动画 */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        /* 半透明背景 */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        /* 确保加载动画在最顶层 */
+    }
+
+    .spinner {
+        border: 8px solid rgba(255, 255, 255, 0.3);
+        /* 旋转的圆圈 */
+        border-top: 8px solid #fff;
+        /* 旋转的圆圈 */
+        border-radius: 50%;
+        /* 使圆形 */
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        /* 动画效果 */
+    }
+
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    .loading-text {
+        color: white;
+        font-size: 24px;
+    }
+</style>
+
+<body class="mdui-theme-primary-indigo mdui-theme-accent-blue">
+    <div id="app">
+        <!-- <div class="loading-overlay">
+            <div class="spinner"></div>
+        </div> -->
+        <div class="mdui-container">
+            <div class="mdui-row">
+                <div class="mdui-col-md-12">
+                    <div class="mdui-card">
+                        <div class="mdui-card-primary">
+                            <div class="mdui-card-primary-title">Rikka Console</div>
+                            <div class="mdui-card-primary-subtitle">服务器控制台</div>
+                        </div>
+
+                        <div class="mdui-card-header" :class="getStatusColorClass()">
+                            <div class="mdui-card-header-avatar" style="text-align: center;line-height: 40px;">
+                                <i class="mdui-icon material-icons" style="font-size: 32px;"
+                                    v-if="ServerStatus == '运行中'">play_arrow</i>
+                                <div class="mdui-spinner mdui-spinner-colorful" style="margin-top: 6px;"
+                                    v-if="ServerStatus == '获取中...'"></div>
+                                <i class="mdui-icon material-icons" v-if="ServerStatus == '已离线'">error</i>
+                            </div>
+                            <div class="mdui-card-header-title">RikkaServer {{ ServerVersion }}</div>
+                            <div class="mdui-card-header-subtitle">{{ ServerStatus }}</div>
+                        </div>
+
+                        <div class="mdui-card-content">
+                            <div class="mdui-typo-title">在线玩家 {{ Plays.length }}</div>
+                            <ul class="mdui-list" style="max-height: 260px;overflow-y: scroll;">
+                                <!-- <li class="mdui-list-item">
+                                    <i class="mdui-list-item-icon mdui-icon material-icons">account_circle</i>
+                                    <div class="mdui-list-item-content">hero_10002<div class="mdui-typo-body-2">
+                                            [Rid]312949842</div>
+                                    </div>
+                                    <label class="mdui-switch">
+                                    <input pluginName="<?=$name?>" type="checkbox" <?=($plugin['enable'] == true) ? 'checked' : '' ?> />
+                                    <i class="mdui-switch-icon"></i>
+                                </label>
+                                </li> -->
+                                <li class="mdui-list-item" v-for="p in Plays">
+                                    <i class="mdui-list-item-icon mdui-icon material-icons">account_circle</i>
+                                    <div class="mdui-list-item-content">{{ p.Name }}<div class="mdui-typo-body-2">
+                                            [RID]{{ p.Rid }}</div>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="mdui-card-actions mdui-float-right">
+                            <button class="mdui-btn mdui-ripple mdui-btn-dense mdui-btn-raised mdui-color-light-blue-accent mdui-text-color-white-text"
+                                    @click="reloadCfg">重载配置</button>
+                            <button class="mdui-btn mdui-ripple mdui-btn-dense mdui-btn-raised mdui-color-pink-accent"
+                                @click="restartServer">重启服务器</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mdui-col-md-12">
+                    <div class="mdui-tab mdui-color-blue-600" mdui-tab>
+                        <a href="#tab-log" class="mdui-ripple">日志</a>
+                        <a href="#tab-mail" class="mdui-ripple">邮件</a>
+                    </div>
+                    <div class="mdui-card" id="tab-log">
+                        <div class="mdui-card-primary">
+                            <div class="mdui-card-primary-subtitle">最近20条日志</div>
+                        </div>
+
+                        <div class="mdui-card-content">
+                            <ul class="mdui-list" id="msg" style="height: 300px;overflow-y: scroll;"></ul>
+                        </div>
+                    </div>
+                    <div class="mdui-card" id="tab-mail">
+                        <div class="mdui-card-primary">
+                            <div class="mdui-card-primary-subtitle">发送邮件</div>
+                        </div>
+
+                        <div class="mdui-card-content">
+                            <div class="mdui-textfield mdui-textfield-floating-label">
+                                <label class="mdui-textfield-label">RID</label>
+                                <input class="mdui-textfield-input" type="text" v-model="SendMailParam.Rid" />
+                            </div>
+                            <div class="mdui-textfield mdui-textfield-floating-label">
+                                <label class="mdui-textfield-label">标题</label>
+                                <input class="mdui-textfield-input" type="text" v-model="SendMailParam.Title" />
+                            </div>
+                            <div class="mdui-textfield">
+                                <textarea class="mdui-textfield-input" rows="4" placeholder="内容"
+                                    v-model="SendMailParam.Content"></textarea>
+                            </div>
+                            <div class="mdui-textfield">
+                                <textarea class="mdui-textfield-input" rows="4" placeholder="附件"
+                                    v-model="SendMailParam.Items"></textarea>
+                                <div class="mdui-textfield-helper">json格式 示例:[[1,1000],[5,1000]] 将发送1000蓝钻 1000粉钻</div>
+                            </div>
+                            <button class="mdui-btn mdui-color-theme-accent mdui-ripple" @click="sendMail">发送</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+<script src="https://cdn.staticfile.net/mdui/1.0.2/js/mdui.min.js"></script>
+<script src="https://cdn.staticfile.net/axios/1.6.5/axios.min.js"></script>
+<script>
+    const { ref, onMounted } = Vue;
+
+    const api = '/'
+
+    const app = Vue.createApp({
+        setup() {
+            const ServerStatus = ref("获取中...");
+            const ServerVersion = ref("")
+            const Plays = ref([]);
+            const SendMailParam = ref({
+
+            })
+
+            const sendMail = () => {
+                console.log(SendMailParam.value);
+                axios.post(api+'server/sendMail', SendMailParam.value).then(function (response) {
+                    mdui.snackbar({
+                        message: response.data.msg,
+                        position: 'top',
+                    });
+                }).catch(function (error) {
+                    mdui.snackbar({
+                        message: "网络错误",
+                        position: 'top',
+                    });
+                });
+            }
+
+            const restartServer = () => {
+                axios.get(api+'server/restart').then(function (response) {
+                    mdui.snackbar({
+                        message: response.data.msg,
+                        position: 'top',
+                    });
+                }).catch(function (error) {
+                    mdui.snackbar({
+                        message: "网络错误",
+                        position: 'top',
+                    });
+                });
+            }
+
+            const reloadCfg = () =>{
+                axios.get(api+'server/reload').then(function (response) {
+                    mdui.snackbar({
+                        message: response.data.msg,
+                        position: 'top',
+                    });
+                }).catch(function (error) {
+                    mdui.snackbar({
+                        message: "网络错误",
+                        position: 'top',
+                    });
+                });
+            }
+
+            const getStatusColorClass = () => {
+                if (ServerStatus.value === '获取中...') {
+                    return 'mdui-color-grey-100';
+                } else if (ServerStatus.value === '运行中') {
+                    return 'mdui-color-green-100';
+                } else {
+                    return 'mdui-color-red-100';
+                }
+            };
+
+            onMounted(() => {
+                setInterval(() => {
+                    axios.get(api+'server/status').then(function (response) {
+                        ServerStatus.value = '运行中';
+                        ServerVersion.value = response.data.version;
+                    }).catch(function (error) {
+                        ServerStatus.value = '已离线'
+                    });
+                }, 2000)
+                setInterval(() => {
+                    axios.get(api+'server/playerlist').then(function (response) {
+                        Plays.value = response.data.data
+                        console.log(Plays);
+                    }).catch(function (error) {
+
+                    });
+                }, 5000)
+            })
+
+            return {
+                ServerStatus,
+                ServerVersion,
+                Plays,
+                getStatusColorClass,
+                restartServer,
+                sendMail,
+                SendMailParam,
+                reloadCfg
+            };
+        }
+    });
+
+    app.mount('#app');
+</script>
+</body>
+
+</html>
